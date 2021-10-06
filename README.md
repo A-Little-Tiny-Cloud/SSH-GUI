@@ -21,9 +21,9 @@ Although SSH-GUI tries to provide a windows-style interface, there are still som
 
 ### 2. dependencies
 SSH-GUI is developed using python and uses the following libraries:
--wxPython: program GUI
--paramiko: Provides ssh and sft protocol functions
--pywin32: It is used to provide some additional functions (shell) of windows, which will be replaced by extended dll in the future.
+- wxPython: program GUI
+- paramiko: Provides ssh and sft protocol functions
+- pywin32: It is used to provide some additional functions (shell) of windows, which will be replaced by extended dll in the future.
 
 Due to the lack of some functions of wxPython (or difficult to use), the program also uses a dll implemented in C++
 
