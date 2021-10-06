@@ -1,0 +1,15 @@
+﻿bandwagon:
+    ip: '10.10.123.111'
+    port: 12345
+    user: 'xxx'
+    password: 'yourpassword'
+    remote_path: '/home/xxx/tmp/'
+    local_path: 'd:\temp\bwg'
+
+hostwind1:
+    ip: '123.10.11.158'
+    port: 22
+    user: 'yyy'
+    password: 'password2'
+    remote_path: '/home/yyy'
+    local_path: 'd:\temp\hostwind'
