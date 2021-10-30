@@ -14,7 +14,8 @@ linux文件名区分大小写,windows不区分.
 import os
 import time
 from threading import Thread, Lock
-from common import FileType, FileItem, PathData, get_safe_tempfile, get_floder_size, get_uuid_str
+from common import get_safe_tempfile, get_floder_size, get_uuid_str
+from FileType import FileItem, PathData
 
 
 class FileProgress:
@@ -187,12 +188,12 @@ def download_folder(path: str, base_path: str, work_path: str, ssh, prg: Progres
 
     os.makedirs(local_path)
 
-    flist = ssh.open_dir(path)
-    pd = PathData(path, flist)
+    flist, mimes = ssh.open_dir(path)
+    pd = PathData(path, flist, mimes)
 
     for fi in pd.flist:
 
-        if fi.ftype == FileType.folder:  # 是目录
+        if fi.is_dir():  # 是目录
             download_folder(fi.full_path(), path, local_path, ssh, prg)
 
         else:
@@ -207,7 +208,7 @@ def download_thread(fi_list, base_path, work_path, ssh, prg: Progress):
     total_sz = 0
 
     for fi in fi_list:
-        if fi.ftype == FileType.folder:  # 是目录
+        if fi.is_dir():  # 是目录
             cmd = "du -sblL {}".format(fi.full_path())
             ret = ssh.execute(cmd)
             size = int(ret.split()[0])
@@ -220,7 +221,7 @@ def download_thread(fi_list, base_path, work_path, ssh, prg: Progress):
     # step2,下载
     for fi in fi_list:
 
-        if fi.ftype == FileType.folder:  # 是目录
+        if fi.is_dir():  # 是目录
             download_folder(fi.full_path(), base_path, work_path, ssh, prg)
 
         else:
@@ -414,8 +415,8 @@ def test_download():
 
     ssh.conncet(info.ip, info.port, info.user, info.password)
 
-    flist = ssh.open_dir(info.remote_path)
-    pd = PathData(info.remote_path, flist)
+    flist, mimes = ssh.open_dir(info.remote_path)
+    pd = PathData(info.remote_path, flist, mimes)
 
     dl_list = [pd.flist[3], pd.flist[4], pd.flist[0]]
 

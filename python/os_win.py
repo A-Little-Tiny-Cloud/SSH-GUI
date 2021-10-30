@@ -6,10 +6,16 @@ windows操作系统相关的封装
 import os
 from ctypes import cdll, c_void_p, c_int, c_wchar_p, pointer
 from ctypes.wintypes import HWND, LPRECT, RECT
+import winreg
+
+import win32api
 import win32gui
+import win32process
+import win32event
 import commctrl
 from win32com.shell import shell, shellcon
 from win32con import FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_DIRECTORY
+
 import wx
 
 
@@ -29,7 +35,7 @@ def listview_GetEdit(handle):
     return edit_ctrl
 
 
-def shell_get_fileinfo(extension):
+def shell_get_fileinfo(extension, link=False):
     """根据扩展名得到文件图标"""
 
     assert len(extension) > 0
@@ -37,6 +43,9 @@ def shell_get_fileinfo(extension):
     flags = shellcon.SHGFI_SMALLICON | shellcon.SHGFI_ICON |  \
         shellcon.SHGFI_DISPLAYNAME | shellcon.SHGFI_TYPENAME | \
         shellcon.SHGFI_USEFILEATTRIBUTES
+
+    if link:
+        flags = flags | shellcon.SHGFI_LINKOVERLAY
 
     if extension[0] == '.':
         retval, info = shell.SHGetFileInfo(extension, FILE_ATTRIBUTE_NORMAL, flags)
@@ -47,81 +56,6 @@ def shell_get_fileinfo(extension):
     assert retval
 
     return info
-
-
-def get_file_ext(fname):
-    '得到文件扩展名'
-
-    a, b = os.path.splitext(fname)
-    ext = b if b else a
-    return ext
-
-
-class TypeItem:
-    def __init__(self, ext, info, pos):
-        hicon, iicon, attr, display_name, type_name = info
-
-        # Get the bitmap
-        icon = wx.Icon()
-        icon.SetHandle(hicon)
-
-        self.ext = ext
-        self.icon = icon  # wx.BitmapFromIcon(icon)
-        self.type_name = type_name
-        self.pos = pos    # 图标在ImageList中序号
-
-
-class FileTypeInfo:
-    '文件类型信息,包括文字描述和图标'
-
-    def __init__(self):
-
-        self.img_list = wx.ImageList(20, 20)
-        self.fti_map = {}
-        self.cache()
-
-    def cache(self):
-        '预先缓存一批常用图标,加快速度'
-
-        files = [os.getenv('windir'), '.---',  # 前两个是特殊的
-                 '.txt', '.log', '.pdf', '.doc', '.docx', '.xls', '.ppt', '.pptx',
-                 '.bmp', '.jpg', '.jpeg', '.png',
-                 '.avi', '.mp4', '.mkv',
-                 '.zip', '.rar', '.tar', '.bz2', '.gz', '.tgz',
-                 '.htm', '.html', '.chm', '.xml',
-                 '.md', '.py', '.whl', '.cpp', '.c', '.h']
-
-        for i, x in enumerate(files):
-            ti = TypeItem(x, shell_get_fileinfo(x), i)
-            self.fti_map[x] = ti
-            self.img_list.Add(ti.icon)
-
-    def new_file_type(self, fi):
-
-        ext = get_file_ext(fi.name)
-
-        n = self.img_list.GetImageCount()
-
-        ti = TypeItem(ext, shell_get_fileinfo(ext), n)
-        self.fti_map[ext] = ti
-        self.img_list.Add(ti.icon)
-
-        return ti.pos
-
-    def get_file_icon(self, fi):
-        '根据文件信息,得到文件图标'
-
-        if fi.attri[0] == 'd':
-            return 0
-
-        ext = get_file_ext(fi.name)
-
-        fti = self.fti_map.get(ext)
-
-        if fti is None:
-            return self.new_file_type(fi)
-
-        return fti.pos
 
 
 class CExtDll:
@@ -249,6 +183,133 @@ os_ext = CExtDll('sshgui_ext.dll')
 # ----------------------------------------------------------------------------
 
 
+def read_reg_value(path, name=None):
+    '读出一个注册表项的值,path是全路径,name是项的名称'
+
+    its = path.split('\\')
+
+    root = its[0]
+
+    if root == 'HKEY_CURRENT_USER':
+        root = winreg.HKEY_CURRENT_USER
+
+    elif root == 'HKEY_LOCAL_MACHINE':
+        root = winreg.HKEY_LOCAL_MACHINE
+
+    elif root == 'HKEY_CLASSES_ROOT':
+        root = winreg.HKEY_CLASSES_ROOT
+
+    else:
+        root = int(root)
+
+    sub = "\\".join(its[1:])
+
+    try:
+        key = winreg.OpenKey(root, sub)
+        value, code = winreg.QueryValueEx(key, name)
+
+        if code == winreg.REG_EXPAND_SZ:
+            value = os.path.expandvars(value)
+
+        return value
+
+    except OSError:
+        pass
+
+    return ''
+
+
+def read_reg_fileexts(root_key, ext):
+
+    cmd = ''
+
+    path = r'%s\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\%s\UserChoice' % (root_key, ext)
+
+    progid = read_reg_value(path, 'ProgId')
+
+    if progid:
+
+        path3 = [
+            r'HKEY_CURRENT_USER\Software\Classes\%s\shell\open\command' % progid,
+            r'HKEY_LOCAL_MACHINE\Software\Classes\%s\shell\open\command' % progid,
+            r'HKEY_CLASSES_ROOT\Software\Classes\%s\shell\open\command' % progid
+        ]
+
+        for x in path3:
+
+            cmd = read_reg_value(x, None)
+
+            if cmd:
+                break
+
+    return cmd
+
+
+def get_associate_cmdline(ext):
+    '得到扩展名对应文件的open命令行'
+
+    cmd = read_reg_fileexts(winreg.HKEY_CURRENT_USER, ext)
+
+    if cmd:
+        return cmd
+
+    cmd = read_reg_fileexts(winreg.HKEY_LOCAL_MACHINE, ext)
+    if cmd:
+        return cmd
+
+    # 按如下优先级:
+    path3 = [
+        r'HKEY_CURRENT_USER\Software\Classes',
+        r'HKEY_LOCAL_MACHINE\Software\Classes',
+        r'HKEY_CLASSES_ROOT',
+    ]
+
+    for x in path3:
+        path = x + r'\%s' % ext
+        ftype = read_reg_value(path)
+
+        if ftype:
+            path = x + r'\%s\shell\open\command' % ftype
+            cmd = read_reg_value(path)
+
+            if cmd:
+                return cmd
+
+    return ''
+
+
+def Excute_and_Wait(cmd):
+    # CreateProcess(
+    #   appName,
+    #   commandLine ,
+    #   processAttributes ,
+    #   threadAttributes ,
+    #   bInheritHandles ,
+    #   dwCreationFlags ,
+    #   newEnvironment ,
+    #   currentDirectory ,
+    #   startupinfo )
+
+    info = win32process.STARTUPINFO()
+    info.hStdInput = win32api.GetStdHandle(win32api.STD_INPUT_HANDLE)
+    info.hStdOutput = win32api.GetStdHandle(win32api.STD_OUTPUT_HANDLE)
+    info.hStdError = win32api.GetStdHandle(win32api.STD_ERROR_HANDLE)
+
+    this_dir = os.path.dirname(__file__)
+
+    hProcess, hThread, dwProcessId, dwThreadId = win32process.CreateProcess(None, cmd, None, None, 1, 0, os.environ, this_dir, info)
+    win32event.WaitForSingleObject(hProcess, win32event.INFINITE)
+
+
 if __name__ == "__main__":
-    app = wx.App()
-    k = FileTypeInfo()
+    print(".bmp " + get_associate_cmdline('.bmp'))
+    print(".tar " + get_associate_cmdline('.tar'))
+    print('.doc ' + get_associate_cmdline('.doc'))
+    print('.pdf ' + get_associate_cmdline('.pdf'))
+    print('.exe ' + get_associate_cmdline('.exe'))
+    print('.flv ' + get_associate_cmdline('.flv'))
+    print('.chm ' + get_associate_cmdline('.chm'))
+    print('.jpg ' + get_associate_cmdline('.jpg'))
+    print('.gif ' + get_associate_cmdline('.gif'))
+    print('.dat ' + get_associate_cmdline('.dat'))
+    print('.*** ' + get_associate_cmdline('.***'))

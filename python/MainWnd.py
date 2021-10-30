@@ -2,20 +2,23 @@
 from threading import Thread
 
 import wx
-from HostOps import RemoteHost
+import HostOps
+import FileType
 from transport import SSHExecuteError
-from common import CmdID, PostEvent, my_EVT_COMMAND_EVENT
+from common import CmdID, PostEvent, my_EVT_COMMAND_EVENT, MessageBox
 from Dialogs import DlgConnect
-from CtrlWnd import FileListWnd, TaskListWnd, myToolBar, MessageBox
+from CtrlWnd import myToolBar
+from FileListWnd import FileListWnd
+from TaskListWnd import TaskListWnd
 
 
 # 主框架窗口
 class MainFrame(wx.Frame):
 
-    def __init__(self, parent, host):
+    def __init__(self):
 
         style = wx.DEFAULT_FRAME_STYLE | wx.MAXIMIZE_BOX
-        wx.Frame.__init__(self, parent, -1, "SSH-GUI", size=(1200, 750), style=style)  # pos=pos
+        wx.Frame.__init__(self, None, -1, "SSH-GUI", size=(1200, 750), style=style)  # pos=pos
 
         menu1 = wx.Menu()
         menu1.Append(CmdID.website_mgr.value, "站点管理", "管理站点信息")
@@ -45,7 +48,7 @@ class MainFrame(wx.Frame):
 
         self.SetMenuBar(menuBar)
 
-        self.toolbar = myToolBar(self, host)
+        self.toolbar = myToolBar(self)
         self.SetToolBar(self.toolbar)
 
         self.splitter = wx.SplitterWindow(self, style=wx.SP_3D | wx.SP_3DSASH | wx.SP_LIVE_UPDATE)
@@ -53,7 +56,7 @@ class MainFrame(wx.Frame):
         self.panel = wx.Panel(self.splitter, name="main_panel")
         self.bottom = wx.Panel(self.splitter, name="info_panel")
 
-        self.flist_wnd = FileListWnd(self.panel, host)
+        self.flist_wnd = FileListWnd(self.panel)
         self.info_wnd = TaskListWnd(self.bottom)
 
         b = wx.BoxSizer(wx.HORIZONTAL)
@@ -80,7 +83,8 @@ class MainFrame(wx.Frame):
 
         self.Center()
 
-        self.host = host  # RemoteHost()
+        self.host = HostOps.g_host
+
     # ------------------------------------------------------------------------------------
     # 系统消息
 
@@ -164,9 +168,12 @@ class MainFrame(wx.Frame):
 
 
 def main():
-    host = RemoteHost()
     app = wx.App()
-    frame = MainFrame(None, host)
+
+    FileType.g_ft_list = FileType.FileTypeList()
+    HostOps.g_host = HostOps.RemoteHost()
+
+    frame = MainFrame()
     frame.Show(True)
     app.MainLoop()
 

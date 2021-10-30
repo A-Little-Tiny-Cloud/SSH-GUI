@@ -4,7 +4,8 @@
 '''
 
 import os
-from common import CmdID, ConfigFile, PathData, get_remote_filename, PostEvent
+from common import CmdID, ConfigFile, get_remote_filename, PostEvent
+from FileType import PathData
 from transport import SSH_Wrap
 from openfile import open_file
 from os_win import os_ext
@@ -108,8 +109,8 @@ class RemoteHost:
 
                 # 刷新源目录
                 path = os.path.dirname(files[0])
-                flist = self.ssh.open_dir(path)
-                self.path_info[path] = PathData(path, flist)
+                flist, mines = self.ssh.open_dir(path)
+                self.path_info[path] = PathData(path, flist, mines)
 
             else:
                 self.ssh.cp_files(files, self.remote_path)
@@ -211,8 +212,8 @@ class RemoteHost:
             ds = None
 
         if ds is None:
-            flist = self.ssh.open_dir(path)
-            self.path_info[path] = PathData(path, flist)
+            flist, mimes = self.ssh.open_dir(path)
+            self.path_info[path] = PathData(path, flist, mimes)
 
         self.remote_path = path
 
@@ -237,6 +238,17 @@ class RemoteHost:
         pd = self.path_info[self.remote_path]
         fi = pd.flist[idx]
         return fi
+
+
+# ------------------------------------------------------------------------------
+# 全局变量
+
+g_host = None
+
+
+def get_global_host():
+    return g_host
+# ------------------------------------------------------------------------------
 
 
 if __name__ == "__main__":

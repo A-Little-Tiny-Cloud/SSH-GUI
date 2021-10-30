@@ -92,25 +92,6 @@ class CmdID(Enum):
     last_id = get_cmd_id()
 
 
-# 文件类型
-@unique
-class FileType(Enum):
-    '文件类型,对应文件的功能和编辑方式'
-
-    folder = 0        # 文件夹
-    text_plain = 1    # *.txt *.log 配置文件: *.ini *.config *.bash_profile *.bash_rc
-    text_struct = 2   # *.md *.yaml *.xml
-    src_code = 3      # *.py *.cpp *.c *.bat  *.make
-    web_page = 4      # *.htm
-    doc = 5           # *.pdf *.doc *.ppt
-    excut_bin = 6     # *.exe *.dll *.sys *.so
-    pack = 7          # *.tar *.bz2 *.tgz ...
-    image = 8         # *.jpg *.bmp *.png ...
-    media = 9         # *.wav, *.avi *.mp4
-    data = 10         # ...
-    unknow = 200      # 未知文件
-
-
 class HostInfo:
     def __init__(self, name, info):
         self.name = name
@@ -139,150 +120,6 @@ class ConfigFile:
 
     def get_host_info(self, host_name):
         return HostInfo(host_name, self.host[host_name])
-
-
-class FileItem:
-    '文件项,一个文件或目录'
-
-    def __init__(self, parent_path, line):
-
-        if not parent_path.endswith('/'):
-            parent_path = parent_path + '/'
-
-        self.path = parent_path
-
-        its = line.split()
-
-        # 下面是line的一个例子(命令为: ls -l --time-style=long-iso)
-        # -rw-rw-r--  1 lihengfeng lihengfeng       7397 2021-09-15 13:56 0001.txt
-        assert len(its) == 8
-
-        self.attri = its[0]
-        self.group = its[2]
-        self.owner = its[3]
-        self.size = int(its[4]) if self.attri[0] != 'd' else -1
-        self.date = its[5]  # 年-月-日
-        self.time = its[6]  # 时:分
-        self.name = its[7]
-
-        ext = os.path.splitext(self.name)[-1]
-
-        if self.attri[0] == 'd':
-            self.ftype = FileType.folder
-
-        elif ext in ('.txt', '.log', '.ini', '.config', '.bash_profile', '.bash_rc'):
-            self.ftype = FileType.text_plain
-
-        elif ext in ('.md', '.yaml', '.xml'):
-            self.ftype = FileType.text_struct
-
-        elif ext in ('.py', '.cpp', '.cxx', '.c', '.h', '.hpp', '.make'):
-            self.ftype = FileType.src_code
-
-        elif ext in ('.html', '.htm', '.mht'):
-            self.ftype = FileType.web_page
-
-        elif ext in ('.pdf', '.doc', '.ppt'):
-            self.ftype = FileType.doc
-
-        elif ext in ('.exe', '.dll', '.sys', '.so'):
-            self.ftype = FileType.excut_bin
-
-        elif ext in ('.tar', '.bz2', '.tgz'):
-            self.ftype = FileType.pack
-
-        elif ext in ('.jpg', '.jpeg', '.bmp', '.png', '.gif'):
-            self.ftype = FileType.image
-
-        elif ext in ('.wav', '.avi', '.mp4'):
-            self.ftype = FileType.media
-
-        else:
-            self.ftype = FileType.unknow
-
-    def change_path(self, path):
-        '修改文件项所在的目录'
-
-        if not path.endswith('/'):
-            path = path + '/'
-
-        self.path = path
-
-    def full_path(self):
-        '文件项的全路径'
-
-        return self.path + self.name
-
-
-# 目录数据
-class PathData:
-    '保存一个目录的数据,包括内部的所有文件项'
-
-    def __init__(self, full_path, flist):
-
-        self.path = full_path
-        self.flist = []
-        for x in flist:
-
-            fi = FileItem(full_path, x)
-
-            if fi.name in ('.', '..'):
-                continue
-
-            self.flist.append(fi)
-
-        # 先按(是否)目录排序,后按名称排序
-        self.flist.sort(key=lambda x: (x.attri[0] != 'd', x.name.lower()))
-
-    def Load(self, full_path, flist):
-        '设置数据'
-
-        self.__init__(full_path, flist)
-
-        return len(self.flist)
-
-    def rm_files(self, lines):
-        lines.sort(reverse=True)
-
-        out = []
-        for x in lines:
-            out.append(self.flist.pop(x))
-
-        return out
-
-    def rename(self, old_name, new_name):
-        find = False
-        for fi in self.flist:
-            if fi.name == old_name:
-                fi.name = new_name
-                find = True
-                break
-
-        assert find
-
-    def find(self, name):
-        '查找目录中是否存在某个文件'
-
-        for i, x in enumerate(self.flist):
-            if x.name == name:
-                return i
-
-        return -1
-
-    # 实现LC_VIRTUAL需要的接口
-    def GetCount(self):
-        return len(self.flist)
-
-    # 实现LC_VIRTUAL需要的接口
-    def GetItem(self, index):
-        if index >= len(self.flist):
-            return None
-
-        return self.flist[index]
-
-    # 实现LC_VIRTUAL需要的接口
-    def UpdateCache(self, start, end):
-        pass
 
 
 def sizeFormat(size, is_disk=False, precision=2):
@@ -411,6 +248,11 @@ def PostEvent(cmd_id, wnd=None, **kw):
         wnd = wx.GetApp().GetTopWindow()
 
     wx.PostEvent(wnd, evt)  # Post the event
+
+
+def MessageBox(parent, title, msg, style=wx.OK):
+    dlg = wx.MessageDialog(parent, msg, title, style=style | wx.CENTRE)
+    return dlg.ShowModal()
 
 
 if __name__ == "__main__":

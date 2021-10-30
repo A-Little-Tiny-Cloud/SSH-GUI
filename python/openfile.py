@@ -9,9 +9,9 @@
 
 import os
 import wx
-from common import FileItem, FileType, get_safe_tempfile, get_file_md5
-from CtrlWnd import MessageBox
-from os_win import os_ext
+from common import get_safe_tempfile, get_file_md5, MessageBox
+from FileType import FileItem, get_global_ft_list
+from os_win import os_ext, Excute_and_Wait
 
 
 def open_file(fi: FileItem, work_path, ssh):
@@ -49,15 +49,41 @@ def open_file(fi: FileItem, work_path, ssh):
 
     # step3, 根据文件类型,打开已知类型, 或调用操作系统打开
 
-    if fi.ftype == FileType.text_plain:    # 简单文本
+    if fi.mime == 'text/plain':    # 简单文本
 
         # 对简单文本文件,由于需要做回城符转换('\n' <--> '\r\n'),
         # 应该使用自己的代码编辑文件.
         # 目前暂时使用系统默认打开方式(记事本程序)
         os_ext.shell_open_and_wait(locfile)
 
-    elif fi.ftype == FileType.image:       # 图像
-        os_ext.shell_open_and_wait(locfile)
+    elif fi.mime.startswith('image/'):  # 图像
+
+        # 对图像来说,如果扩展名不正确,直接调用 shell_open_and_wait 无法打开.
+        # 因为该函数内部根据扩展名来判断文件类型, 扩展名不对则不能判断文件类型.
+        # 为了避免此情况, 先根据mime得到文件类型, 然后调用关联程序打开.
+
+        filetype = get_global_ft_list().ft_list[fi.icon]
+        open_cmd = filetype.open_cmd
+
+        if open_cmd:
+
+            cmd = ''
+
+            if open_cmd.find('%1') >= 0:
+                cmd = open_cmd.replace('%1', locfile)
+            elif open_cmd.find('%L') >= 0:
+                cmd = open_cmd.replace('%L', locfile)
+
+            if cmd:
+                cmd = cmd.replace('%*', '')
+                Excute_and_Wait(cmd)
+            else:
+                MessageBox(None, "错误", "没有找到关联程序，无法打开文件!")
+                return
+
+        else:
+            MessageBox(None, "错误", "没有找到关联程序，无法打开文件!")
+            return
 
     else:
         os_ext.shell_open_and_wait(locfile)

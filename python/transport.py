@@ -82,26 +82,57 @@ class SSH_Wrap:
 
         return text
 
-    def open_dir(self, remote_path):
-        '打开目录, 对应cd+ls命令'
+    def open_dir(self, remote_path, show_hide=False):
+        '打开目录, 对应cd + ls + file命令'
 
-        cmd = "ls -la --time-style=long-iso"
+        if show_hide:
+            cmd = "ls -al --time-style=long-iso; file --mime-type .* *"
+        else:
+            cmd = "ls -l --time-style=long-iso; file --mime-type *"
+
         ret = self.execute(cmd, remote_path)
 
         self.path = remote_path  # 命令执行成功,才改变当前目录(否则不变)
 
-        lines = ret.split('\n')
+        buf = ret.split('\n')
+
+        lines = []
+
+        for x in buf[1:]:  # 第0行是 total xxxx
+            if x == '*: cannot open (No such file or directory)':
+                continue
+            elif len(x.strip()) == 0:
+                continue
+            else:
+                lines.append(x)
+
+        assert len(lines) % 2 == 0
+
+        n = len(lines)//2
+        lines1 = lines[0:n]
+        lines2 = lines[n:]
+
         files = []
-        for line in lines:
+        for line in lines1:
 
             its = line.split()
 
-            if len(its) != 8:
+            if len(its) < 8:
                 continue
 
             files.append(line)
 
-        return files
+        mimes = []
+        for line in lines2:
+
+            its = line.split()
+
+            if len(its) < 2:
+                continue
+
+            mimes.append(line)
+
+        return files, mimes
 
     def set_path(self, remote_path):
         '直接设置当前目录'
